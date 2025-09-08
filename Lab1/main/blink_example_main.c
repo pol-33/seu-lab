@@ -1,104 +1,93 @@
-/* Blink Example
+/* Simple state-machine (polling) example
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+   Functionality (per Lab requirement A):
+   - Read a digital input on GPIO0.
+   - On each rising edge (low->high) toggle an LED connected to GPIO4.
+   - Only polling is used (no interrupts, no extra threads).
 */
+
 #include <stdio.h>
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
-#include "led_strip.h"
 #include "sdkconfig.h"
+#include "esp_log.h"
 
-static const char *TAG = "example";
-
-/* Use project configuration menu (idf.py menuconfig) to choose the GPIO to blink,
-   or you can edit the following line and set a number here.
+/* Fallback defines to help static analysis / builds outside full IDF SDK
+    If the real build provides these via sdkconfig.h, these fallbacks are ignored.
 */
-#define BLINK_GPIO CONFIG_BLINK_GPIO
-
-static uint8_t s_led_state = 0;
-
-#ifdef CONFIG_BLINK_LED_STRIP
-
-static led_strip_handle_t led_strip;
-
-static void blink_led(void)
-{
-    /* If the addressable LED is enabled */
-    if (s_led_state) {
-        /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-        led_strip_set_pixel(led_strip, 0, 16, 16, 16);
-        /* Refresh the strip to send data */
-        led_strip_refresh(led_strip);
-    } else {
-        /* Set all LED off to clear all pixels */
-        led_strip_clear(led_strip);
-    }
-}
-
-static void configure_led(void)
-{
-    ESP_LOGI(TAG, "Example configured to blink addressable LED!");
-    /* LED strip initialization with the GPIO and pixels number*/
-    led_strip_config_t strip_config = {
-        .strip_gpio_num = BLINK_GPIO,
-        .max_leds = 1, // at least one LED on board
-    };
-#if CONFIG_BLINK_LED_STRIP_BACKEND_RMT
-    led_strip_rmt_config_t rmt_config = {
-        .resolution_hz = 10 * 1000 * 1000, // 10MHz
-        .flags.with_dma = false,
-    };
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
-#elif CONFIG_BLINK_LED_STRIP_BACKEND_SPI
-    led_strip_spi_config_t spi_config = {
-        .spi_bus = SPI2_HOST,
-        .flags.with_dma = true,
-    };
-    ESP_ERROR_CHECK(led_strip_new_spi_device(&strip_config, &spi_config, &led_strip));
-#else
-#error "unsupported LED strip backend"
+#ifndef CONFIG_LOG_MAXIMUM_LEVEL
+#define CONFIG_LOG_MAXIMUM_LEVEL 3
 #endif
-    /* Set all LED off to clear all pixels */
-    led_strip_clear(led_strip);
-}
+#ifndef CONFIG_FREERTOS_HZ
+#define CONFIG_FREERTOS_HZ 1000
+#endif
 
-#elif CONFIG_BLINK_LED_GPIO
+static const char *TAG = "gpio_fsm";
 
-static void blink_led(void)
-{
-    /* Set the GPIO level according to the state (LOW or HIGH)*/
-    gpio_set_level(BLINK_GPIO, s_led_state);
-}
-
-static void configure_led(void)
-{
-    ESP_LOGI(TAG, "Example configured to blink GPIO LED!");
-    gpio_reset_pin(BLINK_GPIO);
-    /* Set the GPIO as a push/pull output */
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-}
-
+/* Pins used for this lab exercise
+   Note: On ESP32-C6 DevKit boards, the BOOT button is typically on GPIO9.
+       We'll use GPIO9 by default on ESP32-C6, and GPIO0 otherwise.
+       Override these with your own defines or via Kconfig if desired.
+*/
+#ifndef INPUT_GPIO
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+#define INPUT_GPIO  GPIO_NUM_9
 #else
-#error "unsupported LED type"
+#define INPUT_GPIO  GPIO_NUM_0
+#endif
+#endif
+#ifndef OUTPUT_GPIO
+#define OUTPUT_GPIO GPIO_NUM_4
 #endif
 
 void app_main(void)
 {
+    ESP_LOGI(TAG, "Starting polling-based state machine: GPIO%d -> GPIO%d", INPUT_GPIO, OUTPUT_GPIO);
 
-    /* Configure the peripheral according to the LED type */
-    configure_led();
+    /* Configure output pin (LED) */
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << OUTPUT_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+     /* Configure input pin (button/signal) with internal pull-down disabled and pull-up enabled.
+         If your button is wired to 3V3 instead (with pull-down), switch pull modes below.
+     */
+    io_conf.pin_bit_mask = (1ULL << INPUT_GPIO);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;    // common for buttons to ground
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
+
+    int prev_level = gpio_get_level(INPUT_GPIO);
+    bool led_state = false;
+    gpio_set_level(OUTPUT_GPIO, (int)led_state);
 
     while (1) {
-        ESP_LOGI(TAG, "Turning the LED %s!", s_led_state == true ? "ON" : "OFF");
-        blink_led();
-        /* Toggle the LED state */
-        s_led_state = !s_led_state;
-        vTaskDelay(CONFIG_BLINK_PERIOD / portTICK_PERIOD_MS);
+        int level = gpio_get_level(INPUT_GPIO);
+
+        /* Detect rising edge: previous low (0) and current high (1) */
+        if (prev_level == 0 && level == 1) {
+            /* Toggle LED state on rising edge */
+            led_state = !led_state;
+            gpio_set_level(OUTPUT_GPIO, (int)led_state);
+            ESP_LOGI(TAG, "Rising edge detected: LED %s", led_state ? "ON" : "OFF");
+
+            /* Simple debounce: wait 50 ms and re-read input */
+            vTaskDelay(pdMS_TO_TICKS(50));
+            level = gpio_get_level(INPUT_GPIO);
+        }
+
+        prev_level = level;
+
+        /* Polling interval: 10 ms */
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
