@@ -27,19 +27,20 @@
 static const char *TAG = "gpio_fsm";
 
 /* Pins used for this lab exercise
-   Note: On ESP32-C6 DevKit boards, the BOOT button is typically on GPIO9.
-       We'll use GPIO9 by default on ESP32-C6, and GPIO0 otherwise.
-       Override these with your own defines or via Kconfig if desired.
+    Using your external button on GPIO0 as requested. Adjust pull mode below if wired to 3V3.
 */
-#ifndef INPUT_GPIO
-#ifdef CONFIG_IDF_TARGET_ESP32C6
-#define INPUT_GPIO  GPIO_NUM_9
-#else
+#undef INPUT_GPIO
 #define INPUT_GPIO  GPIO_NUM_0
-#endif
-#endif
 #ifndef OUTPUT_GPIO
 #define OUTPUT_GPIO GPIO_NUM_4
+#endif
+
+/* Button wiring polarity
+    1 = Active High (button -> 3V3). Uses internal pull-down. Rising edge occurs on press.
+    0 = Active Low  (button -> GND). Uses internal pull-up.   Rising edge occurs on release.
+*/
+#ifndef INPUT_ACTIVE_HIGH
+#define INPUT_ACTIVE_HIGH 1
 #endif
 
 void app_main(void)
@@ -56,17 +57,23 @@ void app_main(void)
     };
     gpio_config(&io_conf);
 
-     /* Configure input pin (button/signal) with internal pull-down disabled and pull-up enabled.
-         If your button is wired to 3V3 instead (with pull-down), switch pull modes below.
-     */
+    /* Configure input pin (button/signal) */
     io_conf.pin_bit_mask = (1ULL << INPUT_GPIO);
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;    // common for buttons to ground
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    if (INPUT_ACTIVE_HIGH) {
+        // Button to 3V3: idle=LOW, press=HIGH -> rising edge on press
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+    } else {
+        // Button to GND: idle=HIGH, press=LOW -> rising edge on release
+        io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    }
     io_conf.intr_type = GPIO_INTR_DISABLE;
     gpio_config(&io_conf);
 
     int prev_level = gpio_get_level(INPUT_GPIO);
+    ESP_LOGI(TAG, "Input idle level=%d (INPUT_ACTIVE_HIGH=%d)", prev_level, INPUT_ACTIVE_HIGH);
     bool led_state = false;
     gpio_set_level(OUTPUT_GPIO, (int)led_state);
 
