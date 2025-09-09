@@ -86,10 +86,6 @@ void app_main(void)
             led_state = !led_state;
             gpio_set_level(OUTPUT_GPIO, (int)led_state);
             ESP_LOGI(TAG, "Rising edge detected: LED %s", led_state ? "ON" : "OFF");
-
-            /* Simple debounce: wait 50 ms and re-read input */
-            vTaskDelay(pdMS_TO_TICKS(50));
-            level = gpio_get_level(INPUT_GPIO);
         }
 
         prev_level = level;
