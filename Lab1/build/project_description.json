@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "Lab1",
-    "project_version":    "3febfb3-dirty",
+    "project_version":    "d9c60b7-dirty",
     "project_path":       "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1",
     "idf_path":           "/Users/polplana/esp/v5.5.1/esp-idf",
     "build_dir":          "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/build",
@@ -430,7 +430,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__led_strip" ],
             "file": "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/main/lab1_A_simplificat.c", "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/main/blink_example_main.c" ],
+            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/main/lab1_B_simplificat.c", "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab1/main/blink_example_main.c" ],
             "include_dirs": [ "." ]
         },
         "mbedtls": {
