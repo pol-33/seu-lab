@@ -30,9 +30,11 @@ void app_main(void)
 
     bool led = false;
     bool long_press_checking = false;
+    bool blink = false;
     gpio_set_level(OUTPUT_GPIO, led);
     int prev_level = gpio_get_level(INPUT_GPIO);
     TickType_t start_time = xTaskGetTickCount();
+    TickType_t blink_end = xTaskGetTickCount();
 
     while (1) {
         int level_now = gpio_get_level(INPUT_GPIO);
@@ -48,13 +50,24 @@ void app_main(void)
         if (long_press_checking && prev_level == 1 && level_now == 1) {   // seguim prement
             TickType_t end_time = xTaskGetTickCount();
             if (end_time - start_time > pdMS_TO_TICKS(500)) {
-                led = !led;
-                gpio_set_level(OUTPUT_GPIO, led);
+                blink = !blink;
+                long_press_checking = false;
+                blink_end = end_time + pdMS_TO_TICKS(10000);
                 start_time = end_time; // Reiniciem el temps per evitar múltiples canvis
             }
         }
 
+        if (blink && xTaskGetTickCount() < blink_end) {
+            led = !led;
+            gpio_set_level(OUTPUT_GPIO, led);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else if (!blink || xTaskGetTickCount() >= blink_end) {
+            blink = false;
+            led = false;
+            gpio_set_level(OUTPUT_GPIO, led);
+        }
+
         prev_level = level_now;
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

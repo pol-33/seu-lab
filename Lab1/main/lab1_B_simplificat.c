@@ -49,12 +49,13 @@ void app_main(void)
             TickType_t end_time = xTaskGetTickCount();
             if (end_time - start_time > pdMS_TO_TICKS(500)) {
                 led = !led;
+                long_press_checking = false;
                 gpio_set_level(OUTPUT_GPIO, led);
                 start_time = end_time; // Reiniciem el temps per evitar múltiples canvis
             }
         }
 
         prev_level = level_now;
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
