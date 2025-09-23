@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "Lab2",
-    "project_version":    "fb9de38-dirty",
+    "project_version":    "38ee037-dirty",
     "project_path":       "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab2",
     "idf_path":           "/Users/polplana/esp/v5.5.1/esp-idf",
     "build_dir":          "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab2/build",
@@ -715,7 +715,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab2/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab2/main/pulse_detector.c" ],
+            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab2/main/v1.c" ],
             "include_dirs": []
         },
         "mbedtls": {
