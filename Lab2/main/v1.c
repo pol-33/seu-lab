@@ -7,9 +7,8 @@
 // --- Configuration ---
 #define ADC_UNIT                ADC_UNIT_1
 
-// Note: Please check the GPIO number for the ADC channel you are using.
-// For ESP32-C6, ADC1_CHANNEL_2 is GPIO2.
-#define ADC_CHANNEL             ADC_CHANNEL_2 
+// Set the ADC Channel to 0, which corresponds to GPIO0 on the ESP32-C6.
+#define ADC_CHANNEL             ADC_CHANNEL_0 
 #define ADC_ATTEN               ADC_ATTEN_DB_12
 
 // --- Heart Rate Algorithm Defines ---
