@@ -15,8 +15,8 @@
 #define BUFFER_SIZE             (SAMPLING_FREQUENCY_HZ * BUFFER_DURATION_S) // Total mostres = 250
 #define SAMPLING_PERIOD_MS      (1000 / SAMPLING_FREQUENCY_HZ) // Període entre mostres (20ms)
 
-// Llindar per a la detecció de pics (60% del valor màxim del buffer)
-#define PEAK_THRESHOLD_RATIO    0.6 
+// Llindar per a la detecció de pics (30% del valor màxim del buffer)
+#define PEAK_THRESHOLD_RATIO    0.3
 
 // --- Configuració de l'ADC (ESP32-C6) ---
 #define ADC_UNIT        ADC_UNIT_1
