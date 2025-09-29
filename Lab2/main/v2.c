@@ -18,7 +18,7 @@
 // IMPORTANT: Tune this value based on your sensor's output.
 // If your baseline is ~1600 mV, a pulse peak might be around 1750-1800 mV.
 // A good starting point is a value between your observed baseline and peak.
-#define PEAK_THRESHOLD_MV       1700
+#define PEAK_THRESHOLD_MV       1370
 
 // --- Globals ---
 static const char *TAG = "HEART_RATE_SENSOR";
@@ -64,7 +64,7 @@ void heart_rate_task(void *pvParameter)
         int voltage_mv = (adc_raw_value * ADC_VREF_MV) / 4095;
 
         // --- Debugging output is now in mV ---
-        ESP_LOGI(TAG, "Sensor Value: %d mV", voltage_mv);
+        //ESP_LOGI(TAG, "Sensor Value: %d mV", voltage_mv);
 
         // --- Peak Detection Logic now uses mV ---
         if (voltage_mv > PEAK_THRESHOLD_MV && !is_peak)
