@@ -22,7 +22,7 @@
 
 // --- TUNABLE PARAMETERS ---
 // Now you only need to change these two values
-#define HPF_CUTOFF_FREQ_HZ      0.7f    // Cutoff for High-Pass Filter (removes DC)
+#define HPF_CUTOFF_FREQ_HZ      0.5f    // Cutoff for High-Pass Filter (removes DC)
 #define LPF_CUTOFF_FREQ_HZ      4.0f    // Cutoff for Low-Pass Filter (removes noise)
 
 // --- AUTOMATIC ALPHA CALCULATION ---
@@ -33,7 +33,7 @@
 
 
 // --- THRESHOLD FOR FILTERED SIGNAL (in mV) ---
-#define PEAK_THRESHOLD_MV       4.0f
+#define PEAK_THRESHOLD_MV       5.0f
 
 // --- Globals ---
 static const char *TAG = "HEART_RATE_SENSOR";
@@ -115,7 +115,7 @@ void heart_rate_task(void *pvParameter)
         float final_signal = lowpass_filter(hpf_output, LPF_ALPHA);
         
         // --- Debugging output shows raw and filtered values ---
-         ESP_LOGI(TAG, "Raw: %d mV,  Filtered: %.2f mV", voltage_mv, final_signal);
+        // ESP_LOGI(TAG, "Raw: %d mV,  Filtered: %.2f mV", voltage_mv, final_signal);
 
         // 3. Peak Detection on the final, filtered signal
         if (final_signal > PEAK_THRESHOLD_MV && !is_peak)
