@@ -6,25 +6,19 @@
 
 // --- Configuration ---
 #define ADC_UNIT                ADC_UNIT_1
-
-// Note: Please check the GPIO number for the ADC channel you are using.
-// For ESP32-C6, ADC1_CHANNEL_2 is GPIO2.
-#define ADC_CHANNEL             ADC_CHANNEL_2 
-// Set the ADC Channel to 0, which corresponds to GPIO0 on the ESP32-C6.
-#define ADC_CHANNEL             ADC_CHANNEL_0 
+#define ADC_CHANNEL             ADC_CHANNEL_0   // GPIO0 on ESP32-C6
 #define ADC_ATTEN               ADC_ATTEN_DB_12
+#define ADC_VREF_MV             3300            // Reference voltage in millivolts
 
 // --- Heart Rate Algorithm Defines ---
 #define SAMPLE_INTERVAL_MS      20      // Time between sensor readings (ms)
 #define REPORT_INTERVAL_S       10      // Time between BPM reports (seconds)
 
-// IMPORTANT: This threshold needs to be tuned for your specific setup.
-// It should be set to a value between the sensor's baseline reading and the peak of a pulse.
-// A good starting point is around 2/3 of the maximum expected ADC value.
-// Given a 1.4V peak on a 3.3V system, the signal might peak around 2.4V.
-// With 12-bit resolution and 12dB attenuation (~3.1V range), this is approx (2.4/3.1)*4095 = 3170.
-// Let's set a threshold slightly below that.
-#define PEAK_THRESHOLD          2800
+// --- THRESHOLD IN MILLIVOLTS ---
+// IMPORTANT: Tune this value based on your sensor's output.
+// If your baseline is ~1600 mV, a pulse peak might be around 1750-1800 mV.
+// A good starting point is a value between your observed baseline and peak.
+#define PEAK_THRESHOLD_MV       1700
 
 // --- Globals ---
 static const char *TAG = "HEART_RATE_SENSOR";
@@ -48,7 +42,7 @@ static void configure_adc(void)
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL, &config));
 
-    ESP_LOGI(TAG, "ADC Initialized Successfully on ADC_UNIT %d, Channel %d", ADC_UNIT, ADC_CHANNEL);
+    ESP_LOGI(TAG, "ADC Initialized Successfully on ADC_UNIT %d, Channel %d (GPIO0)", ADC_UNIT, ADC_CHANNEL);
 }
 
 /**
@@ -63,19 +57,22 @@ void heart_rate_task(void *pvParameter)
 
     while (1)
     {
-        // Read ADC value
+        // Read raw ADC value
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL, &adc_raw_value));
-        // Uncomment the line below to see the raw sensor values for tuning the PEAK_THRESHOLD
-        // ESP_LOGI(TAG, "Raw ADC Value: %d", adc_raw_value);
+        
+        // Convert raw value to millivolts
+        int voltage_mv = (adc_raw_value * ADC_VREF_MV) / 4095;
 
-        // --- Simple Peak Detection Logic ---
-        if (adc_raw_value > PEAK_THRESHOLD && !is_peak)
+        // --- Debugging output is now in mV ---
+        ESP_LOGI(TAG, "Sensor Value: %d mV", voltage_mv);
+
+        // --- Peak Detection Logic now uses mV ---
+        if (voltage_mv > PEAK_THRESHOLD_MV && !is_peak)
         {
             beat_count++;
             is_peak = true; // Mark that we are in a peak to avoid double counting
-            ESP_LOGD(TAG, "Peak detected! Raw value: %d, Beat count: %d", adc_raw_value, beat_count);
         }
-        else if (adc_raw_value < PEAK_THRESHOLD && is_peak)
+        else if (voltage_mv < PEAK_THRESHOLD_MV && is_peak)
         {
             is_peak = false; // Peak is over, ready to detect the next one
         }
@@ -85,7 +82,9 @@ void heart_rate_task(void *pvParameter)
         {
             // Calculate BPM based on the beats counted in the last 10 seconds
             int bpm = beat_count * (60 / REPORT_INTERVAL_S);
+            ESP_LOGI(TAG, "-------------------------");
             ESP_LOGI(TAG, "Heart Rate: %d BPM", bpm);
+            ESP_LOGI(TAG, "-------------------------");
 
             // Reset for the next interval
             beat_count = 0;
