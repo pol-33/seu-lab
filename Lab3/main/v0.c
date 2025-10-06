@@ -3,22 +3,18 @@
 #include "freertos/task.h"
 #include "driver/ledc.h"
 #include "esp_err.h"
-#include "rom/ets_sys.h" // For ets_delay_us
+#include "rom/ets_sys.h"
 
 /*
- ==============================================================================
- Laboratori 3 - Sortides amb PWM: Dibuix vectorial en oscil·loscopi
- ==============================================================================
-
- Aquest codi genera un quadrat en un oscil·loscopi configurat en mode X-Y.
- Utilitza dos canals del perifèric LEDC (PWM) de l'ESP32 per controlar
- la deflexió horitzontal (eix X) i vertical (eix Y) del feix d'electrons.
+ ====================================
+ Laboratori 3 - Sortides amb PWM
+ ====================================
 
  Connexions:
  - GPIO 21 -> Filtre RC -> Canal X de l'oscil·loscopi (CH1)
  - GPIO 22 -> Filtre RC -> Canal Y de l'oscil·loscopi (CH2)
 
- Paràmetres clau segons les recomanacions de la pràctica:
+ Paràmetres clau:
  - Freqüència PWM (F_PWM): 250 kHz (recomanat 200-300 kHz)
  - Resolució del cicle de treball: 8 bits (valors de 0 a 255)
  - Freqüència de refresc de punts (Fref): 4 kHz (recomanat 2-5 kHz)
@@ -38,9 +34,8 @@
 #define LEDC_FREQUENCY      (250000)         // Freqüència de 250 kHz
 
 // --- Paràmetres de la figura (quadrat) ---
-// S'utilitza un rang de duty cycle més petit que 0-255 per centrar la figura
-#define DUTY_MIN            30  // Valor mínim del cicle de treball
-#define DUTY_MAX            225 // Valor màxim del cicle de treball
+#define DUTY_MIN            0
+#define DUTY_MAX            255
 #define POINTS_PER_SIDE     40  // Nombre de punts per dibuixar cada costat del quadrat
 
 // --- Càlcul del retard per complir el temps de refresc ---
