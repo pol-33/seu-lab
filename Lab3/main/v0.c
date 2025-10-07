@@ -36,13 +36,13 @@
 // --- Paràmetres de la figura (quadrat) ---
 #define DUTY_MIN            0
 #define DUTY_MAX            255
-#define POINTS_PER_SIDE     40  // Nombre de punts per dibuixar cada costat del quadrat
+#define POINTS_PER_SIDE     20  // Nombre de punts per dibuixar cada costat del quadrat
 
 // --- Càlcul del retard per complir el temps de refresc ---
 // Temps total = 4 costats * POINTS_PER_SIDE * DELAY_US
-// Per a 40ms (40000µs): 40000 / (4 * 40) = 250µs
-// Fref = 1 / 250µs = 4 kHz
-#define DELAY_US            250 // Retard en microsegons entre cada punt
+// Per a 40ms (40000µs): 40000 / (4 * 20) = 500µs
+// Fref = 1 / 500µs = 2 kHz
+#define DELAY_US            500 // Retard en microsegons entre cada punt
 
 /**
  * @brief Inicialitza el temporitzador i els dos canals PWM (X i Y).
