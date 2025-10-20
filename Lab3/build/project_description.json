@@ -577,7 +577,7 @@
             "priv_reqs": [ "esp_driver_uart", "esp_driver_usb_serial_jtag" ],
             "managed_reqs": [],
             "managed_priv_reqs": [],
-            "include_dirs": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab3/build" ]
+            "include_dirs": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/build" ]
         },
         "cxx": {
             "alias": "idf::cxx",
@@ -625,7 +625,7 @@
             "priv_reqs": [ "http_parser", "esp_timer", "lwip" ],
             "managed_reqs": [],
             "managed_priv_reqs": [],
-            "include_dirs": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab3/build", "esp-tls-crypto" ]
+            "include_dirs": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/build", "esp-tls-crypto" ]
         },
         "esp_adc": {
             "alias": "idf::esp_adc",

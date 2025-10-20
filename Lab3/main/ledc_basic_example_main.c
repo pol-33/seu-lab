@@ -1,60 +1,56 @@
-/* LEDC (LED Controller) basic example
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "stdio.h"
+#include "driver/twai.h"
+#include "driver/gpio.h"
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
-#include <stdio.h>
-#include "driver/ledc.h"
-#include "esp_err.h"
-
-#define LEDC_TIMER              LEDC_TIMER_0
-#define LEDC_MODE               LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO          (5) // Define the output GPIO
-#define LEDC_CHANNEL            LEDC_CHANNEL_0
-#define LEDC_DUTY_RES           LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
-#define LEDC_DUTY               (4096) // Set duty to 50%. (2 ** 13) * 50% = 4096
-#define LEDC_FREQUENCY          (4000) // Frequency in Hertz. Set frequency at 4 kHz
-
-/* Warning:
- * For ESP32, ESP32S2, ESP32S3, ESP32C3, ESP32C2, ESP32C6, ESP32H2 (rev < 1.2), ESP32P4 targets,
- * when LEDC_DUTY_RES selects the maximum duty resolution (i.e. value equal to SOC_LEDC_TIMER_BIT_WIDTH),
- * 100% duty cycle is not reachable (duty cannot be set to (2 ** SOC_LEDC_TIMER_BIT_WIDTH)).
- */
-
-static void example_ledc_init(void)
-{
-    // Prepare and then apply the LEDC PWM timer configuration
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LEDC_MODE,
-        .duty_resolution  = LEDC_DUTY_RES,
-        .timer_num        = LEDC_TIMER,
-        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 4 kHz
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-
-    // Prepare and then apply the LEDC PWM channel configuration
-    ledc_channel_config_t ledc_channel = {
-        .speed_mode     = LEDC_MODE,
-        .channel        = LEDC_CHANNEL,
-        .timer_sel      = LEDC_TIMER,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .gpio_num       = LEDC_OUTPUT_IO,
-        .duty           = 0, // Set duty to 0%
-        .hpoint         = 0
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-}
+// ATENCIÓ: Modifica aquests pins segons el teu muntatge!
+#define TX_GPIO_NUM GPIO_NUM_21 // Canvia pel teu pin de TX
+#define RX_GPIO_NUM GPIO_NUM_22 // Canvia pel teu pin de RX
 
 void app_main(void)
 {
-    // Set the LEDC peripheral configuration
-    example_ledc_init();
-    // Set duty to 50%
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, LEDC_DUTY));
-    // Update duty to apply the new value
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+    // 1. Configuració general del driver TWAI
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, TWAI_MODE_NORMAL);
+
+    // 2. Configuració del timing per a 500 Kbps
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+
+    // 3. Configuració del filtre per acceptar tots els missatges
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+    // 4. Instal·lar i iniciar el driver
+    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+        printf("Driver TWAI instal·lat correctament\n");
+    } else {
+        printf("Error en instal·lar el driver TWAI\n");
+        return;
+    }
+
+    if (twai_start() == ESP_OK) {
+        printf("Driver TWAI iniciat\n");
+    } else {
+        printf("Error en iniciar el driver TWAI\n");
+        return;
+    }
+
+    printf("Preparat per fer eco de missatges CAN...\n");
+
+    // 5. Bucle per rebre i fer l'eco
+    while (1) {
+        twai_message_t message;
+        // Espera fins a rebre un missatge
+        if (twai_receive(&message, pdMS_TO_TICKS(10000)) == ESP_OK) {
+            printf("Missatge rebut! ID: 0x%lx, DLC: %d\n", message.identifier, message.data_length_code);
+            
+            // Reenvia el mateix missatge (eco)
+            if (twai_transmit(&message, pdMS_TO_TICKS(1000)) == ESP_OK) {
+                printf("Eco del missatge enviat correctament.\n");
+            } else {
+                printf("Error en enviar l'eco.\n");
+            }
+        } else {
+            // Si no es rep res en 10 segons, el bucle continua
+        }
+    }
 }
