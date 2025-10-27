@@ -26,6 +26,7 @@ static twai_node_handle_t node_hdl = NULL;
  * @brief Funció Callback que s'executa quan es rep un missatge CAN.
  *
  * Aquesta funció s'executa en el context d'una interrupció (ISR).
+ * NO ES POT utilitzar ESP_LOGI ni altres funcions de logging aquí!
  * Aquí és on es gestiona la recepció i l'eco del missatge.
  */
 static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx)
@@ -40,27 +41,9 @@ static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event
     // Llegeix el missatge rebut des del buffer intern del driver
     ret = twai_node_receive_from_isr(handle, &rx_frame);
     if (ret == ESP_OK) {
-        // Imprimeix informació detallada del missatge rebut
-        ESP_LOGI(EXAMPLE_TAG, "=== Missatge rebut ===");
-        ESP_LOGI(EXAMPLE_TAG, "ID: 0x%lx", rx_frame.header.id);
-        ESP_LOGI(EXAMPLE_TAG, "DLC: %d", rx_frame.header.dlc);
-        
-        // Mostra les dades rebudes
-        if (rx_frame.buffer_len > 0) {
-            ESP_LOGI(EXAMPLE_TAG, "Data: %02X %02X %02X %02X %02X %02X %02X %02X",
-                     recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3],
-                     recv_buff[4], recv_buff[5], recv_buff[6], recv_buff[7]);
-        }
-
         // Envia el mateix missatge de tornada (eco)
-        ret = twai_node_transmit(handle, &rx_frame, 0);
-        if (ret == ESP_OK) {
-            ESP_LOGI(EXAMPLE_TAG, "Eco enviat correctament");
-        } else {
-            ESP_LOGE(EXAMPLE_TAG, "Error enviant eco: %s", esp_err_to_name(ret));
-        }
-    } else {
-        ESP_LOGE(EXAMPLE_TAG, "Error llegint missatge: %s", esp_err_to_name(ret));
+        // No fem logging aquí perquè estem en context ISR
+        twai_node_transmit(handle, &rx_frame, 0);
     }
 
     return false; // No necessitem despertar cap tasca de major prioritat
