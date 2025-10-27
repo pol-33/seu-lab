@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "Lab4",
-    "project_version":    "bbd1d98-dirty",
+    "project_version":    "b8c17e3-dirty",
     "project_path":       "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4",
     "idf_path":           "/Users/polplana/esp/v5.5.1/esp-idf",
     "build_dir":          "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/build",
