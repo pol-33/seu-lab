@@ -31,7 +31,7 @@ static twai_node_handle_t node_hdl = NULL;
 static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx)
 {
     esp_err_t ret;
-    uint8_t recv_buff[8] = {0};  // Buffer per rebre les dades
+    uint8_t recv_buff[8];  // Buffer per rebre les dades
     twai_frame_t rx_frame = {
         .buffer = recv_buff,
         .buffer_len = sizeof(recv_buff),
