@@ -44,10 +44,11 @@ messages = {
 
 # Flag to control the receiver thread
 running = True
+last_sent_msg = None  # Track the last sent message to filter echoes
 
 def receive_messages():
     """Background thread to receive CAN messages"""
-    global running
+    global running, last_sent_msg
     print("[Receiver] Starting receive thread...\n")
     
     while running:
@@ -56,10 +57,19 @@ def receive_messages():
             msg = can1.recv(timeout=0.5)
             
             if msg is not None:
-                # Display received message
+                # Filter out our own transmission echo (first copy)
+                # We do this by checking if it matches the last sent message
+                if last_sent_msg is not None:
+                    if (msg.arbitration_id == last_sent_msg.arbitration_id and 
+                        msg.data == last_sent_msg.data):
+                        # This is our own TX echo, skip it but clear the filter
+                        last_sent_msg = None
+                        continue
+                
+                # Display received message (this is the ESP32 response)
                 data_hex = ' '.join([f'{b:02X}' for b in msg.data])
                 timestamp = time.strftime('%H:%M:%S')
-                print(f"\r[{timestamp}] ← Received - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
+                print(f"\r[{timestamp}] ← ESP32 Echo - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
                 print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
                 
         except Exception as e:
@@ -110,6 +120,7 @@ try:
             
             if key_lower in messages:
                 msg = messages[key_lower]
+                last_sent_msg = msg  # Store for echo filtering
                 can1.send(msg)
                 timestamp = time.strftime('%H:%M:%S')
                 data_hex = ' '.join([f'{b:02X}' for b in msg.data])
