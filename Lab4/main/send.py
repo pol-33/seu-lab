@@ -7,6 +7,7 @@ import sys
 import select
 import tty
 import termios
+import threading
 
 # Check system name
 print(f"Operating System: {os.name}")
@@ -41,6 +42,32 @@ messages = {
     'd': can.Message(arbitration_id=0x103, data=[0x44, 0, 0, 0, 0, 0, 0, 0]),  # 'D' in hex
 }
 
+# Flag to control the receiver thread
+running = True
+
+def receive_messages():
+    """Background thread to receive CAN messages"""
+    global running
+    print("[Receiver] Starting receive thread...\n")
+    
+    while running:
+        try:
+            # Wait for a message with a timeout
+            msg = can1.recv(timeout=0.5)
+            
+            if msg is not None:
+                # Display received message
+                data_hex = ' '.join([f'{b:02X}' for b in msg.data])
+                timestamp = time.strftime('%H:%M:%S')
+                print(f"\r[{timestamp}] ← Received - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
+                print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
+                
+        except Exception as e:
+            if running:  # Only print errors if we're still running
+                print(f"\r[Receiver] Error: {e}")
+    
+    print("[Receiver] Thread stopped")
+
 def get_key():
     """Get a single keypress without requiring Enter"""
     fd = sys.stdin.fileno()
@@ -60,6 +87,15 @@ print("Bitrate: 500 kbps")
 print("Press W, A, S, D to send messages")
 print("Press Q to quit\n")
 
+# Start the receiver thread
+receiver_thread = threading.Thread(target=receive_messages, daemon=True)
+receiver_thread.start()
+
+# Give the receiver thread a moment to start
+time.sleep(0.5)
+
+print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
+
 try:
     while True:
         key = get_key()
@@ -68,19 +104,26 @@ try:
             key_lower = key.lower()
             
             if key_lower == 'q':
-                print("\nQuitting...")
+                print("\n\nQuitting...")
+                running = False
                 break
             
             if key_lower in messages:
                 msg = messages[key_lower]
                 can1.send(msg)
-                print(f"Sent '{key_lower.upper()}' - ID: 0x{msg.arbitration_id:03X}, Data: {[hex(b) for b in msg.data]}")
+                timestamp = time.strftime('%H:%M:%S')
+                data_hex = ' '.join([f'{b:02X}' for b in msg.data])
+                print(f"\r[{timestamp}] → Sent '{key_lower.upper()}' - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
+                print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
         
         time.sleep(0.01)  # Small delay to avoid CPU spinning
 
 except KeyboardInterrupt:
     print("\n\nInterrupted by user")
+    running = False
 finally:
+    running = False
+    receiver_thread.join(timeout=1.0)
     can1.shutdown()
     print("CAN interface closed")
 
