@@ -31,16 +31,36 @@ static twai_node_handle_t node_hdl = NULL;
 static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx)
 {
     esp_err_t ret;
-    twai_frame_t rx_frame;
+    uint8_t recv_buff[8] = {0};  // Buffer per rebre les dades
+    twai_frame_t rx_frame = {
+        .buffer = recv_buff,
+        .buffer_len = sizeof(recv_buff),
+    };
 
     // Llegeix el missatge rebut des del buffer intern del driver
     ret = twai_node_receive_from_isr(handle, &rx_frame);
     if (ret == ESP_OK) {
-        // Imprimeix informació del missatge per la consola (opcional, per depurar)
-        ESP_LOGI(EXAMPLE_TAG, "Missatge rebut! ID: 0x%lx, DLC: %d", rx_frame.header.id, rx_frame.header.dlc);
+        // Imprimeix informació detallada del missatge rebut
+        ESP_LOGI(EXAMPLE_TAG, "=== Missatge rebut ===");
+        ESP_LOGI(EXAMPLE_TAG, "ID: 0x%lx", rx_frame.header.id);
+        ESP_LOGI(EXAMPLE_TAG, "DLC: %d", rx_frame.header.dlc);
+        
+        // Mostra les dades rebudes
+        if (rx_frame.buffer_len > 0) {
+            ESP_LOGI(EXAMPLE_TAG, "Data: %02X %02X %02X %02X %02X %02X %02X %02X",
+                     recv_buff[0], recv_buff[1], recv_buff[2], recv_buff[3],
+                     recv_buff[4], recv_buff[5], recv_buff[6], recv_buff[7]);
+        }
 
         // Envia el mateix missatge de tornada (eco)
-        twai_node_transmit(handle, &rx_frame, 0); // Timeout 0, ja que estem en una ISR
+        ret = twai_node_transmit(handle, &rx_frame, 0);
+        if (ret == ESP_OK) {
+            ESP_LOGI(EXAMPLE_TAG, "Eco enviat correctament");
+        } else {
+            ESP_LOGE(EXAMPLE_TAG, "Error enviant eco: %s", esp_err_to_name(ret));
+        }
+    } else {
+        ESP_LOGE(EXAMPLE_TAG, "Error llegint missatge: %s", esp_err_to_name(ret));
     }
 
     return false; // No necessitem despertar cap tasca de major prioritat
@@ -59,9 +79,9 @@ void app_main(void)
         },
         .tx_queue_depth = 10,
         .flags = {
-             .enable_listen_only = false,
+             .enable_listen_only = false,  // Normal mode - can receive and transmit
              .enable_loopback = false,
-             .enable_self_test = true,  // Enable self-test mode for testing
+             .enable_self_test = false,    // Disabled - communicating with external device
         }
     };
     
