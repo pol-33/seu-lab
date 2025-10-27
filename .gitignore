@@ -50,3 +50,21 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# ESP-IDF specific
+**/build/
+**/sdkconfig.old
+**/dependencies.lock
+
+# VS Code specific
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Crash log files
+*.log
+
+# Environment variables file
+.env
