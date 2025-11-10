@@ -53,8 +53,8 @@
 #define SCREEN_SIZE         255    // Mida de la pantalla (0-255)
 #define MOVEMENT_STEP       10     // Píxels de moviment per cada tecla
 #define CAPTURE_DISTANCE    15     // Distància per considerar captura
-#define REFRESH_RATE_MS     20     // 50 Hz refresh rate (20ms per frame)
-#define POINTS_PER_OBJECT   5      // Punts per dibuixar cada objecte
+#define REFRESH_RATE_MS     100    // 10 Hz refresh rate (100ms per frame)
+#define POINT_HOLD_TIME_MS  40     // Temps que es manté cada punt visible (ms)
 
 // IDs de missatges CAN
 #define CAN_ID_P1_W         0x100
@@ -183,22 +183,26 @@ static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event
 
 /**
  * @brief Dibuixa un punt a l'oscil·loscopi
+ * 
+ * Manté el punt fix durant POINT_HOLD_TIME_MS per permetre que l'oscil·loscopi
+ * mostri múltiples mostres al mateix punt (important amb sampling rate baix)
  */
-static void draw_point(uint8_t x, uint8_t y, int repeat)
+static void draw_point(uint8_t x, uint8_t y)
 {
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_X, x));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_X));
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_Y, y));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_Y));
     
-    // Repetim el punt per fer-lo més visible
-    for (int i = 0; i < repeat; i++) {
-        ets_delay_us(100);
-    }
+    // Manté el punt fix per permetre múltiples mostres de l'oscil·loscopi
+    vTaskDelay(pdMS_TO_TICKS(POINT_HOLD_TIME_MS));
 }
 
 /**
  * @brief Tasca de renderització (dibuixa el gat i la rata)
+ * 
+ * Alterna entre mostrar el gat i la rata. Cada punt es manté
+ * durant POINT_HOLD_TIME_MS per ser visible a l'oscil·loscopi.
  */
 static void render_task(void *arg)
 {
@@ -206,12 +210,10 @@ static void render_task(void *arg)
     
     while (1) {
         if (game_over) {
-            // Animació de final del joc: parpelleig
+            // Animació de final del joc: parpelleig al centre
             for (int i = 0; i < 5; i++) {
-                draw_point(128, 128, 20);
-                vTaskDelay(pdMS_TO_TICKS(200));
-                draw_point(0, 0, 20);
-                vTaskDelay(pdMS_TO_TICKS(200));
+                draw_point(128, 128);
+                draw_point(0, 0);
             }
             ESP_LOGW(EXAMPLE_TAG, "===================================");
             ESP_LOGW(EXAMPLE_TAG, "    EL GAT HA ATRAPAT LA RATA!");
@@ -226,17 +228,13 @@ static void render_task(void *arg)
             mouse_pos.y = 128;
         }
         
-        // Dibuixa el gat (Jugador 1) - Diversos punts per fer-lo més visible
-        for (int i = 0; i < POINTS_PER_OBJECT; i++) {
-            draw_point(cat_pos.x, cat_pos.y, 3);
-        }
+        // Alterna entre mostrar el gat i la rata
+        // Això crea un efecte de dos punts parpellejants a l'oscil·loscopi
+        draw_point(cat_pos.x, cat_pos.y);    // Mostra el gat
+        draw_point(mouse_pos.x, mouse_pos.y); // Mostra la rata
         
-        // Dibuixa la rata (Jugador 2)
-        for (int i = 0; i < POINTS_PER_OBJECT; i++) {
-            draw_point(mouse_pos.x, mouse_pos.y, 3);
-        }
-        
-        vTaskDelay(pdMS_TO_TICKS(REFRESH_RATE_MS));
+        // Petit delay addicional entre frames si cal
+        vTaskDelay(pdMS_TO_TICKS(REFRESH_RATE_MS - 2*POINT_HOLD_TIME_MS));
     }
 }
 
