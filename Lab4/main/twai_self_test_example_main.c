@@ -26,21 +26,24 @@ static twai_node_handle_t node_hdl = NULL;
  * @brief Funció Callback que s'executa quan es rep un missatge CAN.
  *
  * Aquesta funció s'executa en el context d'una interrupció (ISR).
+ * NO ES POT utilitzar ESP_LOGI ni altres funcions de logging aquí!
  * Aquí és on es gestiona la recepció i l'eco del missatge.
  */
 static bool twai_rx_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx)
 {
     esp_err_t ret;
-    twai_frame_t rx_frame;
+    uint8_t recv_buff[8];  // Buffer per rebre les dades
+    twai_frame_t rx_frame = {
+        .buffer = recv_buff,
+        .buffer_len = sizeof(recv_buff),
+    };
 
     // Llegeix el missatge rebut des del buffer intern del driver
     ret = twai_node_receive_from_isr(handle, &rx_frame);
     if (ret == ESP_OK) {
-        // Imprimeix informació del missatge per la consola (opcional, per depurar)
-        ESP_LOGI(EXAMPLE_TAG, "Missatge rebut! ID: 0x%lx, DLC: %d", rx_frame.header.id, rx_frame.header.dlc);
-
         // Envia el mateix missatge de tornada (eco)
-        twai_node_transmit(handle, &rx_frame, 0); // Timeout 0, ja que estem en una ISR
+        // No fem logging aquí perquè estem en context ISR
+        twai_node_transmit(handle, &rx_frame, 0);
     }
 
     return false; // No necessitem despertar cap tasca de major prioritat
@@ -59,9 +62,9 @@ void app_main(void)
         },
         .tx_queue_depth = 10,
         .flags = {
-             .enable_listen_only = false,
+             .enable_listen_only = false,  // Normal mode - can receive and transmit
              .enable_loopback = false,
-             .enable_self_test = true,  // Enable self-test mode for testing
+             .enable_self_test = false,    // Disabled - communicating with external device
         }
     };
     
