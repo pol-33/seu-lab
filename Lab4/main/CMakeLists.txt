@@ -1,3 +1,3 @@
-idf_component_register(SRCS "echo_can.c"
+idf_component_register(SRCS "twai_self_test_example_main.c"
                     REQUIRES driver
                     INCLUDE_DIRS ".")

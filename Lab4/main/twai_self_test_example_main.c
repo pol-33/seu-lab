@@ -129,23 +129,23 @@ static void update_position(Position *pos, uint32_t can_id)
     switch (can_id) {
         case CAN_ID_P1_W:
         case CAN_ID_P2_W: // W - Amunt
-            if (pos->y < SCREEN_SIZE - MOVEMENT_STEP) pos->y += MOVEMENT_STEP;
-            else pos->y = SCREEN_SIZE;
+            if (pos->x < SCREEN_SIZE - MOVEMENT_STEP) pos->x += MOVEMENT_STEP;
+            else pos->x = SCREEN_SIZE;
             break;
         case CAN_ID_P1_S:
         case CAN_ID_P2_S: // S - Avall
-            if (pos->y > MOVEMENT_STEP) pos->y -= MOVEMENT_STEP;
-            else pos->y = 0;
-            break;
-        case CAN_ID_P1_A:
-        case CAN_ID_P2_A: // A - Esquerra
             if (pos->x > MOVEMENT_STEP) pos->x -= MOVEMENT_STEP;
             else pos->x = 0;
             break;
+        case CAN_ID_P1_A:
+        case CAN_ID_P2_A: // A - Esquerra
+            if (pos->y > MOVEMENT_STEP) pos->y -= MOVEMENT_STEP;
+            else pos->y = 0;
+            break;
         case CAN_ID_P1_D:
         case CAN_ID_P2_D: // D - Dreta
-            if (pos->x < SCREEN_SIZE - MOVEMENT_STEP) pos->x += MOVEMENT_STEP;
-            else pos->x = SCREEN_SIZE;
+            if (pos->y < SCREEN_SIZE - MOVEMENT_STEP) pos->y += MOVEMENT_STEP;
+            else pos->y = SCREEN_SIZE;
             break;
     }
 }
