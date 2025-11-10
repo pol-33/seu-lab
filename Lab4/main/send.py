@@ -12,68 +12,76 @@ import threading
 # Check system name
 print(f"Operating System: {os.name}")
 
+# Select Player (Cat or Mouse)
+print("\n=== JOC DEL GAT I LA RATA ===")
+print("Tria el teu jugador:")
+print("1 - Gat (Cat) - Jugador 1")
+print("2 - Rata (Mouse) - Jugador 2")
+
+while True:
+    choice = input("Escull (1 o 2): ").strip()
+    if choice == '1':
+        player = "Cat"
+        base_id = 0x100
+        break
+    elif choice == '2':
+        player = "Mouse"
+        base_id = 0x200
+        break
+    else:
+        print("Opció invàlida. Tria 1 o 2.")
+
+print(f"\n✓ Has escollit: {player} (Base ID: 0x{base_id:03X})")
+
 # For macOS with Innomaker USB2CAN adapter
-# The Innomaker adapter uses the gs_usb protocol (Geschwister Schneider USB/CAN)
-print("Looking for USB2CAN adapter...")
+print("\nLooking for USB2CAN adapter...")
 print("Configuring CAN interface at 500 kbps...")
 
 # Try to use gs_usb interface (for Innomaker USB2CAN)
 try:
     can1 = can.interface.Bus(
         interface='gs_usb',
-        channel=0,  # Channel number (not string)
+        channel=0,
         bitrate=500000
     )
     print("✓ CAN bus initialized successfully with gs_usb (USB2CAN adapter)!")
 except Exception as e:
     print(f"✗ gs_usb interface failed: {e}")
     print("\nTroubleshooting:")
-    print("1. Make sure the Innomaker USB2CAN adapter is plugged in (not the ESP32)")
+    print("1. Make sure the Innomaker USB2CAN adapter is plugged in")
     print("2. Close the Innomaker application if it's running")
     print("3. Try unplugging and replugging the USB2CAN adapter")
     print("4. If the problem persists, try: sudo python3 send.py")
     sys.exit(1)
 
-# Message definitions for WASD commands
+# Message definitions for WASD commands with selected player base ID
 messages = {
-    'w': can.Message(arbitration_id=0x100, data=[0x57, 0, 0, 0, 0, 0, 0, 0]),  # 'W' in hex
-    'a': can.Message(arbitration_id=0x101, data=[0x41, 0, 0, 0, 0, 0, 0, 0]),  # 'A' in hex
-    's': can.Message(arbitration_id=0x102, data=[0x53, 0, 0, 0, 0, 0, 0, 0]),  # 'S' in hex
-    'd': can.Message(arbitration_id=0x103, data=[0x44, 0, 0, 0, 0, 0, 0, 0]),  # 'D' in hex
+    'w': can.Message(arbitration_id=base_id + 0, data=[0x57, 0, 0, 0, 0, 0, 0, 0], is_extended_id=False),  # W - Up
+    'a': can.Message(arbitration_id=base_id + 1, data=[0x41, 0, 0, 0, 0, 0, 0, 0], is_extended_id=False),  # A - Left
+    's': can.Message(arbitration_id=base_id + 2, data=[0x53, 0, 0, 0, 0, 0, 0, 0], is_extended_id=False),  # S - Down
+    'd': can.Message(arbitration_id=base_id + 3, data=[0x44, 0, 0, 0, 0, 0, 0, 0], is_extended_id=False),  # D - Right
 }
 
 # Flag to control the receiver thread
 running = True
-last_sent_msg = None  # Track the last sent message to filter echoes
 
 def receive_messages():
     """Background thread to receive CAN messages"""
-    global running, last_sent_msg
+    global running
     print("[Receiver] Starting receive thread...\n")
     
     while running:
         try:
-            # Wait for a message with a timeout
             msg = can1.recv(timeout=0.5)
             
             if msg is not None:
-                # Filter out our own transmission echo (first copy)
-                # We do this by checking if it matches the last sent message
-                if last_sent_msg is not None:
-                    if (msg.arbitration_id == last_sent_msg.arbitration_id and 
-                        msg.data == last_sent_msg.data):
-                        # This is our own TX echo, skip it but clear the filter
-                        last_sent_msg = None
-                        continue
-                
-                # Display received message (this is the ESP32 response)
                 data_hex = ' '.join([f'{b:02X}' for b in msg.data])
                 timestamp = time.strftime('%H:%M:%S')
-                print(f"\r[{timestamp}] ← ESP32 Echo - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
-                print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
+                print(f"\r[{timestamp}] ← CAN RX - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
+                print(f"[{player}] Press W/A/S/D to move, Q to quit: ", end='', flush=True)
                 
         except Exception as e:
-            if running:  # Only print errors if we're still running
+            if running:
                 print(f"\r[Receiver] Error: {e}")
     
     print("[Receiver] Thread stopped")
@@ -84,7 +92,6 @@ def get_key():
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(sys.stdin.fileno())
-        # Check if input is available
         if select.select([sys.stdin], [], [], 0.1)[0]:
             ch = sys.stdin.read(1)
             return ch
@@ -92,19 +99,25 @@ def get_key():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-print("\n=== CAN Bus WASD Controller ===")
+print("\n=== CAN Bus Game Controller ===")
+print(f"Player: {player}")
+print(f"CAN IDs: 0x{base_id:03X}-0x{base_id+3:03X}")
 print("Bitrate: 500 kbps")
-print("Press W, A, S, D to send messages")
-print("Press Q to quit\n")
+print("\nControls:")
+print("  W - Move Up")
+print("  A - Move Left")
+print("  S - Move Down")
+print("  D - Move Right")
+print("  Q - Quit\n")
 
 # Start the receiver thread
 receiver_thread = threading.Thread(target=receive_messages, daemon=True)
 receiver_thread.start()
-
-# Give the receiver thread a moment to start
 time.sleep(0.5)
 
-print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
+print(f"[{player}] Press W/A/S/D to move, Q to quit: ", end='', flush=True)
+
+print(f"[{player}] Press W/A/S/D to move, Q to quit: ", end='', flush=True)
 
 try:
     while True:
@@ -120,14 +133,14 @@ try:
             
             if key_lower in messages:
                 msg = messages[key_lower]
-                last_sent_msg = msg  # Store for echo filtering
                 can1.send(msg)
                 timestamp = time.strftime('%H:%M:%S')
                 data_hex = ' '.join([f'{b:02X}' for b in msg.data])
-                print(f"\r[{timestamp}] → Sent '{key_lower.upper()}' - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
-                print("Press W/A/S/D to send, Q to quit: ", end='', flush=True)
+                direction = {'w': 'UP', 'a': 'LEFT', 's': 'DOWN', 'd': 'RIGHT'}[key_lower]
+                print(f"\r[{timestamp}] → [{player}] {direction} - ID: 0x{msg.arbitration_id:03X}, Data: [{data_hex}]")
+                print(f"[{player}] Press W/A/S/D to move, Q to quit: ", end='', flush=True)
         
-        time.sleep(0.01)  # Small delay to avoid CPU spinning
+        time.sleep(0.01)
 
 except KeyboardInterrupt:
     print("\n\nInterrupted by user")
@@ -137,4 +150,5 @@ finally:
     receiver_thread.join(timeout=1.0)
     can1.shutdown()
     print("CAN interface closed")
+    print(f"\nGame Over! Thanks for playing as {player}!")
 

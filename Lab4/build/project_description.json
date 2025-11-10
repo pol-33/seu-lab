@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "Lab4",
-    "project_version":    "1554894-dirty",
+    "project_version":    "255e222-dirty",
     "project_path":       "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4",
     "idf_path":           "/Users/polplana/esp/v5.5.1/esp-idf",
     "build_dir":          "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/build",
@@ -700,7 +700,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/main/twai_self_test_example_main.c" ],
+            "sources": [ "/Users/polplana/Documents/Universitat/SEU/seu-lab/Lab4/main/echo_can.c" ],
             "include_dirs": [ "." ]
         },
         "mbedtls": {
