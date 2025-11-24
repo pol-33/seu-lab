@@ -5,7 +5,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 
-#define APP_TAG "LAB5_EX2"
+#define APP_TAG "LAB5_EX2_BIN"
 
 // --- Configuració GPIO ---
 #define GPIO_LED1           1
@@ -16,11 +16,11 @@
 #define LED1_DELAY_MS       300
 #define LED23_DELAY_MS      1000
 
-// --- Global ---
-SemaphoreHandle_t xMutex = NULL;
+// Variable global per al semàfor
+SemaphoreHandle_t xSemBinari = NULL;
 
 /**
- * @brief Inicialitzem els GPIOs com a sortida
+ * @brief Inicialitza els GPIOs com a sortida
  */
 static void configure_leds(void)
 {
@@ -39,53 +39,52 @@ static void configure_leds(void)
     gpio_set_level(GPIO_LED3, 0); // LED3 apagat
 }
 
-/**
- * @brief Tasca 1: Intermitència LED1 (0.3s)
- */
+// Tasca 1: Intermitència LED1 (0.3s)
 void task_led1(void *pvParameters)
 {
     uint8_t state = 0;
     while (1) {
-        // --- INICI ZONA CRÍTICA ---
-        // Intentem agafar el 'token' per accedir al recurs (LEDs/Consola)
-        if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+        // Intentem agafar el semàfor
+        if (xSemaphoreTake(xSemBinari, portMAX_DELAY) == pdTRUE) {
             
+            // --- ZONA CRÍTICA ---
             state = !state;
             gpio_set_level(GPIO_LED1, state);
-            ESP_LOGI(APP_TAG, "[T1] LED1 canviat a %d", state);
+            ESP_LOGI(APP_TAG, "[T1] LED1: %d", state);
             
-            xSemaphoreGive(xMutex);
+            // Retornem el semàfor perquè l'altra tasca pugui entrar
+            xSemaphoreGive(xSemBinari);
+            // --- FI ZONA CRÍTICA ---
         }
-        // --- FI ZONA CRÍTICA ---
 
         vTaskDelay(pdMS_TO_TICKS(LED1_DELAY_MS));
     }
 }
 
-/**
- * @brief Tasca 2: Alternança LED2 i LED3 (1s)
- */
+// Tasca 2: Alternança LED2/LED3 (1s)
 void task_led23(void *pvParameters)
 {
     uint8_t toggle = 0;
     while (1) {
-        // --- INICI ZONA CRÍTICA ---
-        if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+        // Intentem agafar el semàfor
+        if (xSemaphoreTake(xSemBinari, portMAX_DELAY) == pdTRUE) {
             
+            // --- ZONA CRÍTICA ---
             toggle = !toggle;
             if (toggle) {
                 gpio_set_level(GPIO_LED2, 0);
                 gpio_set_level(GPIO_LED3, 1);
-                ESP_LOGW(APP_TAG, "[T2] Alternança: LED2 OFF / LED3 ON");
+                ESP_LOGW(APP_TAG, "[T2] L2 OFF / L3 ON");
             } else {
                 gpio_set_level(GPIO_LED2, 1);
                 gpio_set_level(GPIO_LED3, 0);
-                ESP_LOGW(APP_TAG, "[T2] Alternança: LED2 ON / LED3 OFF");
+                ESP_LOGW(APP_TAG, "[T2] L2 ON / L3 OFF");
             }
 
-            xSemaphoreGive(xMutex);
+            // Retornem el semàfor
+            xSemaphoreGive(xSemBinari);
+            // --- FI ZONA CRÍTICA ---
         }
-        // --- FI ZONA CRÍTICA ---
 
         vTaskDelay(pdMS_TO_TICKS(LED23_DELAY_MS));
     }
@@ -95,15 +94,22 @@ void app_main(void)
 {
     configure_leds();
 
-    // Creem un Mutex. Per defecte es crea "lliure" (unlocked).
-    xMutex = xSemaphoreCreateMutex();
+    // Creem un Semàfor Binari
+    xSemBinari = xSemaphoreCreateBinary();
 
-    if (xMutex != NULL) {
-        // Creem les tasques
-        // Nota: Hem posat la mateixa prioritat per a totes dues tasques, però es poden ajustar segons les necessitats.
+    if (xSemBinari != NULL) {
+        // !!! PAS CRÍTIC !!!
+        // A diferència del Mutex, el Semàfor Binari es crea "BUIT" (0).
+        // Hem de fer un Give inicial per posar-lo a "1" i que la primera
+        // tasca pugui entrar. Sinó, el programa es penja.
+        xSemaphoreGive(xSemBinari);
+
+        // Creació de tasques
         xTaskCreate(task_led1, "LED1_Task", 2048, NULL, 5, NULL);
         xTaskCreate(task_led23, "LED23_Task", 2048, NULL, 5, NULL);
+        
+        ESP_LOGI(APP_TAG, "Semàfor Binari creat i tasques iniciades.");
     } else {
-        ESP_LOGE(APP_TAG, "Error creant el semàfor/mutex");
+        ESP_LOGE(APP_TAG, "Error creant el semàfor");
     }
 }
