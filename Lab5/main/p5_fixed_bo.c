@@ -2,6 +2,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include <stdio.h>
+#include <math.h>
 
 SemaphoreHandle_t mutex;
 
@@ -18,9 +19,13 @@ void task_low(void *pv)
         xSemaphoreTake(mutex, portMAX_DELAY);
         printf("[LOW] Tinc el mutex! (simulant treball llarg)\n");
         // Simula feina llarga que bloqueja el recurs
+        double aux = 0;
         for (int i = 0; i < 10; i++)
         {
-            vTaskDelay(pdMS_TO_TICKS(500)); // treball lent
+            aux = 0;
+            for (long j = 0; j < 100000; j++) {
+                aux = sqrt(j);
+            }
             printf("[LOW] Treball lent... %d/10\n", i + 1);
         }
         printf("[LOW] Alliberant mutex\n");
