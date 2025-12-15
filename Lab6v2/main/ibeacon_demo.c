@@ -1,24 +1,13 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ * LAB 6 - Single Device Distance Scanner
+ * Targeted for: Redmi Note 10 Pro
  */
-
-/****************************************************************************
-*
-* This file is for iBeacon demo. It supports both iBeacon sender and receiver
-* which is distinguished by macros IBEACON_SENDER and IBEACON_RECEIVER,
-*
-* iBeacon is a trademark of Apple Inc. Before building devices which use iBeacon technology,
-* visit https://developer.apple.com/ibeacon/ to obtain a license.
-*
-****************************************************************************/
 
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <math.h> // <--- ADDED for pow() function
+#include <math.h> 
 
 #include "nvs_flash.h"
 #include "esp_bt.h"
@@ -31,23 +20,16 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 
-static const char* DEMO_TAG = "LAB6_DISTANCE";
-extern esp_ble_ibeacon_vendor_t vendor_config;
+static const char* DEMO_TAG = "DISTANCE_FINAL";
 
-// --- LAB 6 CONFIGURATION ---
-#define IBEACON_SENDER      0
-#define IBEACON_RECEIVER    1
-// FORCE RECEIVER MODE for Lab 6
-#define IBEACON_MODE        IBEACON_RECEIVER 
+// --- CONFIGURATION ---
+// 1. MAC Address of your Redmi Note 10 Pro (from your logs)
+uint8_t TARGET_MAC[6] = {0x7a, 0xcd, 0xad, 0xda, 0x4f, 0xf8};
 
-// Distance Calculation Constants
-#define MEASURED_POWER_AT_1M  -60.0f // Calibrate this value (RSSI at 1 meter)
-#define PATH_LOSS_EXPONENT    2.5f   // 2.0 = Free space, 2.5-3.0 = Indoors
+// 2. Calibration
+#define MEASURED_POWER_AT_1M  -60.0f 
+#define PATH_LOSS_EXPONENT    2.5f   
 
-///Declare static functions
-static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
-
-#if (IBEACON_MODE == IBEACON_RECEIVER)
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
     .own_addr_type          = BLE_ADDR_TYPE_PUBLIC,
@@ -57,18 +39,6 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_duplicate         = BLE_SCAN_DUPLICATE_DISABLE 
 };
 
-#elif (IBEACON_MODE == IBEACON_SENDER)
-static esp_ble_adv_params_t ble_adv_params = {
-    .adv_int_min        = 0x20,
-    .adv_int_max        = 0x40,
-    .adv_type           = ADV_TYPE_NONCONN_IND,
-    .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
-    .channel_map        = ADV_CHNL_ALL,
-    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
-};
-#endif
-
-// --- HELPER FUNCTION: Calculate Distance ---
 float calculate_distance(int rssi) {
     if (rssi == 0) return -1.0; 
     float ratio = (MEASURED_POWER_AT_1M - rssi) / (10 * PATH_LOSS_EXPONENT);
@@ -77,117 +47,31 @@ float calculate_distance(int rssi) {
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
-    esp_err_t err;
-
     switch (event) {
-    case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:{
-#if (IBEACON_MODE == IBEACON_SENDER)
-        esp_ble_gap_start_advertising(&ble_adv_params);
-#endif
+    case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT:
+        esp_ble_gap_start_scanning(0);
         break;
-    }
-    case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
-#if (IBEACON_MODE == IBEACON_RECEIVER)
-        // the unit of the duration is second, 0 means scan permanently
-        uint32_t duration = 0;
-        esp_ble_gap_start_scanning(duration);
-#endif
-        break;
-    }
+        
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
-        //scan start complete event to indicate scan start successfully or failed
-        if ((err = param->scan_start_cmpl.status) != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(DEMO_TAG, "Scanning start failed, error %s", esp_err_to_name(err));
-        } else {
-            ESP_LOGI(DEMO_TAG, "Scanning start successfully");
-        }
-        break;
-    case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-        //adv start complete event to indicate adv start successfully or failed
-        if ((err = param->adv_start_cmpl.status) != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(DEMO_TAG, "Advertising start failed, error %s", esp_err_to_name(err));
-        } else {
-            ESP_LOGI(DEMO_TAG, "Advertising start successfully");
-        }
+        ESP_LOGI(DEMO_TAG, "Searching for Redmi Note 10 Pro...");
         break;
     
-    // --- THIS IS THE IMPORTANT PART FOR DISTANCE ---
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
-        switch (scan_result->scan_rst.search_evt) {
-        case ESP_GAP_SEARCH_INQ_RES_EVT:
+        if (scan_result->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
             
-            // 1. Calculate Distance for ANY device found
-            int rssi = scan_result->scan_rst.rssi;
-            float dist = calculate_distance(rssi);
-
-            // 2. Print result (MAC Address : RSSI : Distance)
-            // You can use the MAC address to identify your specific phone
-            ESP_LOGI(DEMO_TAG, "Device: %02x:%02x:%02x:%02x:%02x:%02x | RSSI: %d | Dist: %.2fm",
-                     scan_result->scan_rst.bda[0], scan_result->scan_rst.bda[1], scan_result->scan_rst.bda[2],
-                     scan_result->scan_rst.bda[3], scan_result->scan_rst.bda[4], scan_result->scan_rst.bda[5],
-                     rssi, dist);
-
-            /* 
-             * 3. (Optional) Legacy Template Code: 
-             * If the device happens to be an iBeacon, print extra info.
-             * This checks if the packet structure matches Apple's spec.
-             */
-            if (esp_ble_is_ibeacon_packet(scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len)){
-                esp_ble_ibeacon_t *ibeacon_data = (esp_ble_ibeacon_t*)(scan_result->scan_rst.ble_adv);
-                // ESP_LOGI(DEMO_TAG, "----------iBeacon Data Found----------");
-                // You can access Major/Minor here if needed later
+            // Check if MAC matches TARGET_MAC
+            if (memcmp(scan_result->scan_rst.bda, TARGET_MAC, 6) == 0) {
+                int rssi = scan_result->scan_rst.rssi;
+                float dist = calculate_distance(rssi);
+                
+                ESP_LOGI(DEMO_TAG, "PHONE FOUND! RSSI: %d dBm | Distance: %.2f meters", rssi, dist);
             }
-            break;
-        default:
-            break;
         }
         break;
     }
-
-    case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
-        if ((err = param->scan_stop_cmpl.status) != ESP_BT_STATUS_SUCCESS){
-            ESP_LOGE(DEMO_TAG, "Scanning stop failed, error %s", esp_err_to_name(err));
-        }
-        else {
-            ESP_LOGI(DEMO_TAG, "Scanning stop successfully");
-        }
-        break;
-
-    case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-        if ((err = param->adv_stop_cmpl.status) != ESP_BT_STATUS_SUCCESS){
-            ESP_LOGE(DEMO_TAG, "Advertising stop failed, error %s", esp_err_to_name(err));
-        }
-        else {
-            ESP_LOGI(DEMO_TAG, "Advertising stop successfully");
-        }
-        break;
-
-    default:
-        break;
+    default: break;
     }
-}
-
-
-void ble_ibeacon_appRegister(void)
-{
-    esp_err_t status;
-
-    ESP_LOGI(DEMO_TAG, "register callback");
-
-    //register the scan callback function to the gap module
-    if ((status = esp_ble_gap_register_callback(esp_gap_cb)) != ESP_OK) {
-        ESP_LOGE(DEMO_TAG, "gap register error: %s", esp_err_to_name(status));
-        return;
-    }
-
-}
-
-void ble_ibeacon_init(void)
-{
-    esp_bluedroid_init();
-    esp_bluedroid_enable();
-    ble_ibeacon_appRegister();
 }
 
 void app_main(void)
@@ -197,21 +81,9 @@ void app_main(void)
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     esp_bt_controller_init(&bt_cfg);
     esp_bt_controller_enable(ESP_BT_MODE_BLE);
-
-    ble_ibeacon_init();
-
-    /* set scan parameters */
-#if (IBEACON_MODE == IBEACON_RECEIVER)
+    esp_bluedroid_init();
+    esp_bluedroid_enable();
+    
+    esp_ble_gap_register_callback(esp_gap_cb);
     esp_ble_gap_set_scan_params(&ble_scan_params);
-
-#elif (IBEACON_MODE == IBEACON_SENDER)
-    esp_ble_ibeacon_t ibeacon_adv_data;
-    esp_err_t status = esp_ble_config_ibeacon_data (&vendor_config, &ibeacon_adv_data);
-    if (status == ESP_OK){
-        esp_ble_gap_config_adv_data_raw((uint8_t*)&ibeacon_adv_data, sizeof(ibeacon_adv_data));
-    }
-    else {
-        ESP_LOGE(DEMO_TAG, "Config iBeacon data failed: %s", esp_err_to_name(status));
-    }
-#endif
 }
