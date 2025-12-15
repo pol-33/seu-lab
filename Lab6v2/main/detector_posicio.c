@@ -24,11 +24,11 @@ static const char* DEMO_TAG = "DISTANCE_FINAL";
 
 // --- CONFIGURATION ---
 // 1. MAC Address of your Redmi Note 10 Pro (from your logs)
-uint8_t TARGET_MAC[6] = {0x7a, 0xcd, 0xad, 0xda, 0x4f, 0xf8};
+uint8_t TARGET_MAC[6] = {0x78, 0xb1, 0x12, 0xed, 0x7e, 0x3a};
 
 // 2. Calibration
-#define MEASURED_POWER_AT_1M  -60.0f 
-#define PATH_LOSS_EXPONENT    2.5f   
+#define MEASURED_POWER_AT_1M  -80.0f 
+#define PATH_LOSS_EXPONENT    2.0f   
 
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
@@ -39,10 +39,16 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_duplicate         = BLE_SCAN_DUPLICATE_DISABLE 
 };
 
+// float calculate_distance(int rssi) {
+//     if (rssi == 0) return -1.0; 
+//     float ratio = (MEASURED_POWER_AT_1M - rssi) / (10 * PATH_LOSS_EXPONENT);
+//     return pow(10, ratio);
+// }
+
 float calculate_distance(int rssi) {
     if (rssi == 0) return -1.0; 
-    float ratio = (MEASURED_POWER_AT_1M - rssi) / (10 * PATH_LOSS_EXPONENT);
-    return pow(10, ratio);
+    float distance = 1 * sqrt(rssi / MEASURED_POWER_AT_1M);
+    return distance;
 }
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
