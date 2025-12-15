@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 
+
+
 /****************************************************************************
 *
 * This file is for iBeacon demo. It supports both iBeacon sender and receiver
@@ -18,9 +20,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <math.h> // <--- ADDED for pow() function
-
 #include "nvs_flash.h"
+
 #include "esp_bt.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gattc_api.h"
@@ -31,18 +32,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 
-static const char* DEMO_TAG = "LAB6_DISTANCE";
+static const char* DEMO_TAG = "IBEACON_DEMO";
 extern esp_ble_ibeacon_vendor_t vendor_config;
-
-// --- LAB 6 CONFIGURATION ---
-#define IBEACON_SENDER      0
-#define IBEACON_RECEIVER    1
-// FORCE RECEIVER MODE for Lab 6
-#define IBEACON_MODE        IBEACON_RECEIVER 
-
-// Distance Calculation Constants
-#define MEASURED_POWER_AT_1M  -60.0f // Calibrate this value (RSSI at 1 meter)
-#define PATH_LOSS_EXPONENT    2.5f   // 2.0 = Free space, 2.5-3.0 = Indoors
 
 ///Declare static functions
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
@@ -54,7 +45,7 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_filter_policy     = BLE_SCAN_FILTER_ALLOW_ALL,
     .scan_interval          = 0x50,
     .scan_window            = 0x30,
-    .scan_duplicate         = BLE_SCAN_DUPLICATE_DISABLE 
+    .scan_duplicate         = BLE_SCAN_DUPLICATE_DISABLE
 };
 
 #elif (IBEACON_MODE == IBEACON_SENDER)
@@ -68,12 +59,6 @@ static esp_ble_adv_params_t ble_adv_params = {
 };
 #endif
 
-// --- HELPER FUNCTION: Calculate Distance ---
-float calculate_distance(int rssi) {
-    if (rssi == 0) return -1.0; 
-    float ratio = (MEASURED_POWER_AT_1M - rssi) / (10 * PATH_LOSS_EXPONENT);
-    return pow(10, ratio);
-}
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
@@ -110,33 +95,23 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             ESP_LOGI(DEMO_TAG, "Advertising start successfully");
         }
         break;
-    
-    // --- THIS IS THE IMPORTANT PART FOR DISTANCE ---
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
-            
-            // 1. Calculate Distance for ANY device found
-            int rssi = scan_result->scan_rst.rssi;
-            float dist = calculate_distance(rssi);
-
-            // 2. Print result (MAC Address : RSSI : Distance)
-            // You can use the MAC address to identify your specific phone
-            ESP_LOGI(DEMO_TAG, "Device: %02x:%02x:%02x:%02x:%02x:%02x | RSSI: %d | Dist: %.2fm",
-                     scan_result->scan_rst.bda[0], scan_result->scan_rst.bda[1], scan_result->scan_rst.bda[2],
-                     scan_result->scan_rst.bda[3], scan_result->scan_rst.bda[4], scan_result->scan_rst.bda[5],
-                     rssi, dist);
-
-            /* 
-             * 3. (Optional) Legacy Template Code: 
-             * If the device happens to be an iBeacon, print extra info.
-             * This checks if the packet structure matches Apple's spec.
-             */
+            /* Search for BLE iBeacon Packet */
             if (esp_ble_is_ibeacon_packet(scan_result->scan_rst.ble_adv, scan_result->scan_rst.adv_data_len)){
                 esp_ble_ibeacon_t *ibeacon_data = (esp_ble_ibeacon_t*)(scan_result->scan_rst.ble_adv);
-                // ESP_LOGI(DEMO_TAG, "----------iBeacon Data Found----------");
-                // You can access Major/Minor here if needed later
+                ESP_LOGI(DEMO_TAG, "----------iBeacon Found----------");
+                ESP_LOGI(DEMO_TAG, "Device address: "ESP_BD_ADDR_STR"", ESP_BD_ADDR_HEX(scan_result->scan_rst.bda));
+                ESP_LOG_BUFFER_HEX("IBEACON_DEMO: Proximity UUID", ibeacon_data->ibeacon_vendor.proximity_uuid, ESP_UUID_LEN_128);
+
+                uint16_t major = ENDIAN_CHANGE_U16(ibeacon_data->ibeacon_vendor.major);
+                uint16_t minor = ENDIAN_CHANGE_U16(ibeacon_data->ibeacon_vendor.minor);
+                ESP_LOGI(DEMO_TAG, "Major: 0x%04x (%d)", major, major);
+                ESP_LOGI(DEMO_TAG, "Minor: 0x%04x (%d)", minor, minor);
+                ESP_LOGI(DEMO_TAG, "Measured power (RSSI at a 1m distance): %d dBm", ibeacon_data->ibeacon_vendor.measured_power);
+                ESP_LOGI(DEMO_TAG, "RSSI of packet: %d dbm", scan_result->scan_rst.rssi);
             }
             break;
         default:
