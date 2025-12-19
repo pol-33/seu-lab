@@ -1,6 +1,5 @@
 /*
- * LAB 6 - Device Selector & Auto-Calibrated Tracker
- * Fixed Input: Just press ENTER to continue steps.
+ * LAB 6 - Device Selector, Auto-Calibration & Averaged Tracking
  */
 
 #include <stdint.h>
@@ -21,7 +20,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char* TAG = "LAB6_APP";
+static const char* TAG = "LAB6_TRACKER";
 
 // --- GLOBAL VARIABLES ---
 uint8_t TARGET_MAC[6] = {0}; 
@@ -30,6 +29,10 @@ bool target_selected = false;
 // Calibration Defaults
 float measured_power_at_1m = -74.0f; 
 float path_loss_exponent   = 3.0f;
+
+// Tracking Accumulators (for the 1-second average)
+volatile int32_t track_rssi_sum = 0;
+volatile int16_t track_packet_count = 0;
 
 // --- DATA STRUCTURES ---
 #define MAX_DEVICES 20
@@ -54,12 +57,12 @@ typedef enum {
 
 volatile app_state_t current_state = STATE_SCANNING_LIST;
 
-// Calibration Accumulators
-int32_t rssi_accum = 0;
-int16_t sample_cnt = 0;
+// Calibration Variables
+int32_t calib_accum = 0;
+int16_t calib_cnt = 0;
 float calib_rssi_0_5 = 0;
 float calib_rssi_1_0 = 0;
-#define SAMPLES_NEEDED 40
+#define CALIB_SAMPLES 40
 
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
@@ -111,24 +114,18 @@ void add_device_to_list(uint8_t *bda, char *name, int rssi) {
 
 // --- HELPER: Wait for User Input ---
 void wait_for_user_input() {
-    // Clear buffer
-    while (getchar() != EOF) { vTaskDelay(10/portTICK_PERIOD_MS); }
-    
-    printf(" >> Press ENTER (or any key) to start measuring... \n");
+    while (getchar() != EOF) { vTaskDelay(10/portTICK_PERIOD_MS); } // Clear buffer
+    printf(" >> Press ENTER to measure... \n");
     while (1) {
         int c = getchar();
-        // Check for any valid character (not EOF and not error)
-        if (c != EOF && c != 0xFF) { 
-            break;
-        }
+        if (c != EOF && c != 0xFF) break;
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
-    // Small delay to clear newline characters
     vTaskDelay(200 / portTICK_PERIOD_MS);
 }
 
 // --- MATH ---
-float calculate_distance(int rssi) {
+float calculate_distance(float rssi) {
     if (rssi == 0) return -1.0; 
     float ratio = (measured_power_at_1m - rssi) / (10 * path_loss_exponent);
     return pow(10, ratio);
@@ -136,44 +133,49 @@ float calculate_distance(int rssi) {
 
 void compute_calibration() {
     measured_power_at_1m = calib_rssi_1_0;
+    // Calculate N:  (RSSI@0.5 - RSSI@1.0) / (10 * log10(1/0.5))
+    // 10 * log10(2) = 3.01
     float diff = calib_rssi_0_5 - calib_rssi_1_0;
     
     if (diff <= 0) {
-        path_loss_exponent = 3.0f; 
-        ESP_LOGE(TAG, "Calibration data unclear. Using default N=3.0");
+        path_loss_exponent = 3.0f; // Default if data is bad
+        ESP_LOGE(TAG, "Bad calibration data (0.5m was weaker than 1m). Using default N=3.0");
     } else {
         path_loss_exponent = diff / 3.01f;
     }
-    printf("\n>>> CALIBRATION SAVED: Power@1m=%.2f, N=%.2f <<<\n", measured_power_at_1m, path_loss_exponent);
+    printf("\n>>> CALIBRATION RESULTS <<<\n");
+    printf("   Reference Power (1m): %.2f dBm\n", measured_power_at_1m);
+    printf("   Path Loss Exponent:   %.2f\n", path_loss_exponent);
+    printf(">>> ------------------- <<<\n");
 }
 
-// --- CONSOLE TASK (UI) ---
-void console_task(void *pvParameters) {
+// --- UI & TRACKING LOOP TASK ---
+void app_task(void *pvParameters) {
+    // 1. SCANNING
     printf("\n*** SCANNING FOR 5 SECONDS... ***\n");
     vTaskDelay(5000 / portTICK_PERIOD_MS);
     
     esp_ble_gap_stop_scanning();
     current_state = STATE_SELECTING;
 
+    // 2. SELECTION
     printf("\n------------------------------------------------\n");
     printf(" FOUND DEVICES:\n");
     printf("------------------------------------------------\n");
     for (int i = 0; i < device_count; i++) {
-        printf("[%d] Name: %-15s | MAC: %02x:%02x:%02x:%02x:%02x:%02x | RSSI: %d\n", 
+        printf("[%d] %-15s | %02x:%02x:%02x:%02x:%02x:%02x | RSSI: %d\n", 
                i, device_list[i].name,
                device_list[i].bda[0], device_list[i].bda[1], device_list[i].bda[2],
                device_list[i].bda[3], device_list[i].bda[4], device_list[i].bda[5],
                device_list[i].rssi);
     }
     printf("------------------------------------------------\n");
-    printf("Type the number of your phone: ");
+    printf("Type number of your phone: ");
 
     int selection = -1;
     while (selection < 0 || selection >= device_count) {
         char c = getchar();
-        if (c >= '0' && c <= '9') {
-            selection = c - '0';
-        }
+        if (c >= '0' && c <= '9') selection = c - '0';
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     
@@ -181,32 +183,51 @@ void console_task(void *pvParameters) {
     target_selected = true;
     printf("\nSelected: %s\n", device_list[selection].name);
     
-    // --- STEP 1 ---
+    // 3. CALIBRATION 0.5m
     printf("\n--- CALIBRATION STEP 1 ---\n");
     printf("Place phone at 0.5 METERS.\n");
     wait_for_user_input();
 
-    rssi_accum = 0; sample_cnt = 0;
+    calib_accum = 0; calib_cnt = 0;
     current_state = STATE_CALIB_0_5M;
     esp_ble_gap_start_scanning(0); 
     
     while(current_state == STATE_CALIB_0_5M) vTaskDelay(100/portTICK_PERIOD_MS);
 
-    // --- STEP 2 ---
+    // 4. CALIBRATION 1.0m
     printf("\n--- CALIBRATION STEP 2 ---\n");
     printf("Place phone at 1.0 METER.\n");
     wait_for_user_input();
 
-    rssi_accum = 0; sample_cnt = 0;
+    calib_accum = 0; calib_cnt = 0;
     current_state = STATE_CALIB_1_0M;
     
     while(current_state == STATE_CALIB_1_0M) vTaskDelay(100/portTICK_PERIOD_MS);
 
     compute_calibration();
+    
+    // 5. TRACKING LOOP (1 Second Average)
     current_state = STATE_TRACKING;
-    printf("\n*** TRACKING STARTED ***\n");
+    printf("\n*** TRACKING STARTED (Updates every 1s) ***\n");
 
-    vTaskDelete(NULL);
+    while (1) {
+        // Reset accumulators
+        track_rssi_sum = 0;
+        track_packet_count = 0;
+
+        // Wait 1 second to gather data
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+        if (track_packet_count > 0) {
+            float avg_rssi = (float)track_rssi_sum / track_packet_count;
+            float dist = calculate_distance(avg_rssi);
+            
+            ESP_LOGI(TAG, "Avg RSSI: %6.1f dBm | Avg Dist: %5.2f m | Packets: %d", 
+                     avg_rssi, dist, track_packet_count);
+        } else {
+            ESP_LOGW(TAG, "No signal received...");
+        }
+    }
 }
 
 // --- BLE CALLBACK ---
@@ -221,37 +242,42 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         esp_ble_gap_cb_param_t *scan = (esp_ble_gap_cb_param_t *)param;
         if (scan->scan_rst.search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
             
+            // Phase 1: Scan List
             if (current_state == STATE_SCANNING_LIST) {
                 char name[32];
                 parse_ble_name(scan->scan_rst.ble_adv, scan->scan_rst.adv_data_len, name);
                 add_device_to_list(scan->scan_rst.bda, name, scan->scan_rst.rssi);
             }
+            // Check Target
             else if (target_selected && memcmp(scan->scan_rst.bda, TARGET_MAC, 6) == 0) {
                 int rssi = scan->scan_rst.rssi;
 
+                // Phase 2: Calibration 0.5m
                 if (current_state == STATE_CALIB_0_5M) {
-                    rssi_accum += rssi;
-                    sample_cnt++;
-                    if (sample_cnt % 5 == 0) printf(".");
-                    if (sample_cnt >= SAMPLES_NEEDED) {
-                        calib_rssi_0_5 = (float)rssi_accum / SAMPLES_NEEDED;
-                        printf(" Done (Avg: %.1f)\n", calib_rssi_0_5);
+                    calib_accum += rssi;
+                    calib_cnt++;
+                    if (calib_cnt % 5 == 0) printf(".");
+                    if (calib_cnt >= CALIB_SAMPLES) {
+                        calib_rssi_0_5 = (float)calib_accum / CALIB_SAMPLES;
+                        printf(" Done (%.1f)\n", calib_rssi_0_5);
                         current_state = STATE_WAIT_MOVE;
                     }
                 }
+                // Phase 3: Calibration 1.0m
                 else if (current_state == STATE_CALIB_1_0M) {
-                    rssi_accum += rssi;
-                    sample_cnt++;
-                    if (sample_cnt % 5 == 0) printf(".");
-                    if (sample_cnt >= SAMPLES_NEEDED) {
-                        calib_rssi_1_0 = (float)rssi_accum / SAMPLES_NEEDED;
-                        printf(" Done (Avg: %.1f)\n", calib_rssi_1_0);
+                    calib_accum += rssi;
+                    calib_cnt++;
+                    if (calib_cnt % 5 == 0) printf(".");
+                    if (calib_cnt >= CALIB_SAMPLES) {
+                        calib_rssi_1_0 = (float)calib_accum / CALIB_SAMPLES;
+                        printf(" Done (%.1f)\n", calib_rssi_1_0);
                         current_state = STATE_WAIT_MOVE;
                     }
                 }
+                // Phase 4: Tracking (Accumulate for Task)
                 else if (current_state == STATE_TRACKING) {
-                    float dist = calculate_distance(rssi);
-                    ESP_LOGI(TAG, "RSSI: %d | Dist: %.2fm", rssi, dist);
+                    track_rssi_sum += rssi;
+                    track_packet_count++;
                 }
             }
         }
@@ -274,5 +300,5 @@ void app_main(void)
     esp_ble_gap_register_callback(esp_gap_cb);
     esp_ble_gap_set_scan_params(&ble_scan_params);
 
-    xTaskCreate(console_task, "console_task", 4096, NULL, 5, NULL);
+    xTaskCreate(app_task, "app_task", 4096, NULL, 5, NULL);
 }
