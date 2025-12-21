@@ -30,7 +30,7 @@ bool target_selected = false;
 float measured_power_at_1m = -74.0f; 
 float path_loss_exponent   = 3.0f;
 
-// Tracking Accumulators (for the 1-second average)
+// Tracking Accumulators (for the 3-seconds average)
 volatile int32_t track_rssi_sum = 0;
 volatile int16_t track_packet_count = 0;
 
@@ -206,17 +206,17 @@ void app_task(void *pvParameters) {
 
     compute_calibration();
     
-    // 5. TRACKING LOOP (1 Second Average)
+    // 5. TRACKING LOOP (3 Second Average)
     current_state = STATE_TRACKING;
-    printf("\n*** TRACKING STARTED (Updates every 1s) ***\n");
+    printf("\n*** TRACKING STARTED (Updates every 3s) ***\n");
 
     while (1) {
         // Reset accumulators
         track_rssi_sum = 0;
         track_packet_count = 0;
 
-        // Wait 1 second to gather data
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // Wait 3 seconds to gather data
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
 
         if (track_packet_count > 0) {
             float avg_rssi = (float)track_rssi_sum / track_packet_count;

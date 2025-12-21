@@ -215,7 +215,7 @@ void app_task(void *pvParameters) {
 
     while (1) {
         track_rssi_sum = 0; track_packet_count = 0;
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
 
         if (track_packet_count > 0) {
             float avg_rssi = (float)track_rssi_sum / track_packet_count;
