@@ -8,6 +8,7 @@
 
  // Aquesta versió del master fa visualització gràfica.
 // S'assumeix un sol master i un sol esclau. La distància entre ells és configurada per l'usuari.
+// Atenció: Per a poder interacturar per consola, connecteu el cable a l'ESP32 a través de l'USB-C on hi diu UART, no a l'altre.
 
 
 #include <stdint.h>
