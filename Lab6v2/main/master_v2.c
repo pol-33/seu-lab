@@ -1,13 +1,20 @@
 /*
- * LAB 6 - MASTER NODE (Triangulator + Visual Map)
- * Fixed: Compilation errors & Multi-digit input support
+ * LAB 6 - MASTER NODE (Triangulator + Centered Map)
+ * 1. Selects Device.
+ * 2. Asks user for Slave Distance.
+ * 3. Auto-Calibrates.
+ * 4. Draws Centered Map (3s refresh).
  */
+
+ // Aquesta versió del master fa visualització gràfica.
+// S'assumeix un sol master i un sol esclau. La distància entre ells és configurada per l'usuari.
+
 
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h> // Added for atoi
+#include <stdlib.h>
 #include <math.h> 
 
 #include "nvs_flash.h"
@@ -32,9 +39,9 @@ uint8_t TARGET_MAC[6] = {0};
 bool target_selected = false;
 
 // Geometry (Set by User)
-float slave_dist_m = 2.0f; // Default 2m, will be overwritten
+float slave_dist_m = 2.0f; // Default
 
-// Calibration Defaults (Set by Wizard)
+// Calibration Defaults
 float measured_power_at_1m = -74.0f; 
 float path_loss_exponent   = 3.0f;
 
@@ -44,7 +51,7 @@ volatile int16_t track_packet_count = 0;
 volatile int8_t slave_read_rssi = 0;
 
 // --- DATA STRUCTURES ---
-#define MAX_DEVICES 50 // Increased buffer to find more devices
+#define MAX_DEVICES 50 
 typedef struct {
     uint8_t bda[6];
     char name[32];
@@ -93,7 +100,7 @@ static esp_ble_adv_params_t ble_adv_params = {
     .channel_map = ADV_CHNL_ALL, .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-// --- VISUAL MAP DRAWER ---
+// --- VISUAL MAP DRAWER (CENTERED) ---
 void draw_visual_map(float x, float y, float d1, float d2) {
     // Clear screen
     printf("\033[2J\033[H"); 
@@ -103,74 +110,86 @@ void draw_visual_map(float x, float y, float d1, float d2) {
     printf("Position:    X=%5.2fm |  Y=%5.2fm\n", x, y);
     printf("------------------------------------------------------\n");
 
-    int grid_w = 40; 
+    int grid_w = 60; // Wider grid for better centering
     int grid_h = 20; 
-    float range_x = slave_dist_m + 2.0; 
-    float range_y = 4.0;
     
-    int offset_x_chars = 5; 
-
-    // Coords to Grid
-    int p_col = offset_x_chars + (int)((x / range_x) * grid_w);
+    // --- CENTERING LOGIC ---
+    // We add a virtual margin of 1.0 meter to the left of Master and right of Slave
+    float margin_m = 1.0f; 
+    float total_width_m = slave_dist_m + (margin_m * 2);
+    
+    // Master is at 0.0. In our logical map, it starts at -margin.
+    // logical_x ranges from [-margin] to [slave_dist + margin]
+    
+    // Convert Real coords to Grid coords
+    // Col = ( (X - min_x) / total_width ) * grid_w
+    // min_x is -margin_m. So X - (-margin) = X + margin
+    int p_col = (int)( (x + margin_m) / total_width_m * grid_w );
+    
+    // Y Axis (0 to 4m depth)
+    float range_y = 4.0;
     int p_row = grid_h - (int)((y / range_y) * grid_h);
 
-    int m_col = offset_x_chars; 
-    int s_col = offset_x_chars + (int)((slave_dist_m / range_x) * grid_w);
+    // Calculate fixed positions for M and S
+    int m_col = (int)( (0.0f + margin_m) / total_width_m * grid_w );
+    int s_col = (int)( (slave_dist_m + margin_m) / total_width_m * grid_w );
     int base_row = grid_h; 
 
-    // FIX: Separated if statements to fix compilation error
-    if (p_col < 0) { p_col = 0; }
-    if (p_col > grid_w + offset_x_chars) { p_col = grid_w + offset_x_chars; }
-    
-    if (p_row < 0) { p_row = 0; }
-    if (p_row > grid_h) { p_row = grid_h; }
+    // Bounds check
+    if (p_col < 0) p_col = 0; 
+    if (p_col >= grid_w) p_col = grid_w - 1;
+    if (p_row < 0) p_row = 0; 
+    if (p_row >= grid_h) p_row = grid_h - 1;
 
     // Draw
     for (int r = 0; r <= grid_h; r++) {
         printf("  |");
-        for (int c = 0; c <= grid_w + offset_x_chars; c++) {
-            if (c < offset_x_chars) { printf(" "); continue; } 
-
-            int actual_col = c;
+        for (int c = 0; c < grid_w; c++) {
             
-            if (r == p_row && actual_col == p_col) printf("O"); // Phone
-            else if (r == base_row && actual_col == m_col) printf("M"); // Master
-            else if (r == base_row && actual_col == s_col) printf("S"); // Slave
-            else if (r == base_row && actual_col > m_col && actual_col < s_col) printf("_"); // Line
-            else printf("."); 
+            if (r == p_row && c == p_col) {
+                printf("O"); // Phone
+            } 
+            else if (r == base_row && c == m_col) {
+                printf("M"); // Master
+            }
+            else if (r == base_row && c == s_col) {
+                printf("S"); // Slave
+            }
+            else if (r == base_row && c > m_col && c < s_col) {
+                printf("_"); // Line connecting them
+            }
+            else if (r == base_row) {
+                printf(" "); // Floor outside zone
+            }
+            else {
+                printf("."); // Air
+            }
         }
         printf("|\n");
     }
-    printf("  ------------------------------------------\n");
-    printf("  [M](0,0) ---- %.2fm ---- [S](%.2f,0)\n", slave_dist_m, slave_dist_m);
+    printf("  ------------------------------------------------------------\n");
+    printf("         [M](0,0) <--- %.2fm ---> [S](%.2f,0)\n", slave_dist_m, slave_dist_m);
 }
 
 // --- INPUT HELPERS ---
 
-// Read multi-digit input (e.g., "12" + Enter)
 int get_multidigit_input() {
     char buffer[16];
     int idx = 0;
-    
-    // Flush input
-    while (getchar() != EOF) { vTaskDelay(10/portTICK_PERIOD_MS); }
+    while (getchar() != EOF) { vTaskDelay(10/portTICK_PERIOD_MS); } // Flush
 
     while (1) {
         int c = getchar();
         if (c != EOF) {
-            // Handle Enter key
             if (c == '\n' || c == '\r') {
-                if (idx > 0) { // Only return if we have digits
+                if (idx > 0) {
                     buffer[idx] = '\0';
                     printf("\n");
                     return atoi(buffer);
                 }
-            } 
-            // Handle Digits
-            else if (c >= '0' && c <= '9' && idx < 10) {
+            } else if (c >= '0' && c <= '9' && idx < 10) {
                 buffer[idx++] = (char)c;
-                printf("%c", c); // Echo
-                fflush(stdout);
+                printf("%c", c); fflush(stdout);
             }
         }
         vTaskDelay(20 / portTICK_PERIOD_MS);
@@ -234,7 +253,6 @@ void compute_calibration() {
     float diff = calib_rssi_0_5 - calib_rssi_1_0;
     if (diff <= 0) { path_loss_exponent = 3.0f; } else { path_loss_exponent = diff / 3.01f; }
     printf("\n>>> CALIBRATION SAVED: Power@1m=%.2f, N=%.2f <<<\n", measured_power_at_1m, path_loss_exponent);
-    // Use the TAG variable to satisfy compiler warning
     ESP_LOGI(TAG, "Calibration updated.");
 }
 
@@ -278,7 +296,6 @@ void app_task(void *pvParameters) {
     }
     printf("Type number of your phone + ENTER: "); fflush(stdout);
 
-    // FIX: Using multi-digit input function
     int selection = -1;
     while (selection < 0 || selection >= device_count) { 
         selection = get_multidigit_input(); 
@@ -322,7 +339,9 @@ void app_task(void *pvParameters) {
 
     while (1) {
         track_rssi_sum = 0; track_packet_count = 0;
-        vTaskDelay(1000 / portTICK_PERIOD_MS); 
+        
+        // Wait 3 seconds (Refresh Rate)
+        vTaskDelay(3000 / portTICK_PERIOD_MS); 
 
         if (track_packet_count > 0) {
             float avg_rssi = (float)track_rssi_sum / track_packet_count;

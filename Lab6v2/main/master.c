@@ -5,6 +5,9 @@
  * 3. Triangulates.
  */
 
+// Aquesta versió del master imprimeix per consola i no fa visualització gràfica, de manera que és més difícil d'interpretar.
+// S'assumeix un sol master i un sol esclau, a 2 metres de distància l'un de l'altre. No s'admeten més de 9 dispositius BLE a l'abast.
+
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
