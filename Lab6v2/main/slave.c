@@ -5,6 +5,8 @@
  * 3. Advertises RSSI (0xEE) back to Master.
  */
 
+ // Quan utilitzem la versió 3 del máster (amb 2 esclaus), cal canviar el nom del dispositiu a "SLAVE_2" per a un dels dispositius esclaus (esp_ble_gap_set_device_name("SLAVE_2");
+
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
